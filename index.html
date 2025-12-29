@@ -11,7 +11,7 @@
             --bg-input: #111;
             --text-main: #eee;
             --text-muted: #888;
-            --accent: #6c5ce7;
+            --accent: #6c5ce7; /* Studio Purple */
             --accent-hover: #5649c0;
             --border: rgba(255, 255, 255, 0.1);
             --active-tab: #2d3436;
@@ -24,7 +24,6 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: var(--text-main);
             font-size: 13px;
-            touch-action: none;
         }
 
         #canvas-container {
@@ -35,6 +34,7 @@
             left: 0;
             z-index: 1;
             background: radial-gradient(circle at center, #111 0%, #000 100%);
+            touch-action: none; /* Prevent scrolling ONLY on the canvas */
         }
 
         /* --- UI SIDEBAR --- */
@@ -64,6 +64,7 @@
             background: var(--bg-header);
             border-bottom: 1px solid var(--border);
             min-height: 45px;
+            flex-shrink: 0;
         }
 
         .tab-btn {
@@ -89,16 +90,26 @@
             flex: 1;
             overflow-y: auto;
             padding: 0;
-            -webkit-overflow-scrolling: touch;
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            touch-action: pan-y; /* Explicitly allow vertical scrolling */
         }
         .tab-content.active { display: flex; flex-direction: column; }
-        .tab-content::-webkit-scrollbar { width: 6px; }
-        .tab-content::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        
+        /* SCROLLBAR STYLING */
+        .tab-content::-webkit-scrollbar { width: 12px; }
+        .tab-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+        .tab-content::-webkit-scrollbar-thumb { 
+            background: #555; 
+            border-radius: 6px; 
+            border: 2px solid rgba(0,0,0,0.3); 
+        }
+        .tab-content::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
         .module {
             background: rgba(255,255,255,0.02);
             border-bottom: 1px solid var(--border);
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .module-header {
@@ -132,6 +143,7 @@
             padding: 15px;
             background: rgba(0,0,0,0.2);
             border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
         }
 
         .control-row {
@@ -157,6 +169,7 @@
             accent-color: var(--accent);
             background: transparent;
             -webkit-appearance: none;
+            cursor: pointer;
         }
         input[type="range"]::-webkit-slider-runnable-track {
             height: 4px;
@@ -182,7 +195,7 @@
             font-size: 12px;
         }
         
-        select { width: 100%; }
+        select { width: 100%; cursor: pointer; }
         
         input[type="color"] {
             border: none;
@@ -252,7 +265,7 @@
             font-size: 10px;
         }
 
-        input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+        input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
         hr { border: 0; border-top: 1px solid var(--border); margin: 15px 0; }
 
         .file-input-wrapper {
@@ -332,6 +345,15 @@
                         <label>Size</label>
                         <input type="range" id="p-size" min="0.01" max="2" step="0.01">
                         <span class="value-display" id="v-size"></span>
+                    </div>
+                    <div class="control-row">
+                        <label>Size over Lifetime</label>
+                        <select id="p-size-life">
+                            <option value="0">Constant</option>
+                            <option value="1">Grow</option>
+                            <option value="2">Shrink</option>
+                            <option value="3">Pulse</option>
+                        </select>
                     </div>
                     <div class="control-row">
                         <label>Gravity</label>
@@ -439,20 +461,8 @@
             </div>
 
             <div class="module">
-                <div class="module-header">Renderer</div>
+                <div class="module-header">Appearance</div>
                 <div class="module-body">
-                    <div class="control-row">
-                        <label>Billboard Mode</label>
-                        <select id="p-billboard">
-                            <option value="camera">Camera (Default)</option>
-                            <option value="horizontal">Horizontal (Flat)</option>
-                            <option value="stretched">Stretched (Speed)</option>
-                        </select>
-                    </div>
-                    <div class="file-input-wrapper" style="margin-bottom:10px;">
-                        <button class="primary" style="width:100%">Import Sprite Texture</button>
-                        <input type="file" id="file-sprite" accept="image/*">
-                    </div>
                     <div class="control-row">
                         <label>Start Color</label>
                         <input type="color" id="p-color1">
@@ -467,13 +477,25 @@
                         <span class="value-display" id="v-opacity"></span>
                     </div>
                     <div class="control-row">
-                        <label>Default Texture</label>
+                        <label>Texture</label>
                         <select id="p-texture">
                             <option value="soft">Soft (Glow)</option>
                             <option value="hard">Hard (Circle)</option>
                             <option value="star">Star</option>
                             <option value="smoke">Smoke</option>
                             <option value="square">Square (Pixel)</option>
+                        </select>
+                    </div>
+                    <div class="file-input-wrapper" style="margin-top:10px; margin-bottom:10px;">
+                        <button class="primary" style="width:100%">Import Sprite Texture</button>
+                        <input type="file" id="file-sprite" accept="image/*">
+                    </div>
+                    <div class="control-row">
+                        <label>Billboard Mode</label>
+                        <select id="p-billboard">
+                            <option value="camera">Camera (Default)</option>
+                            <option value="horizontal">Horizontal (Flat)</option>
+                            <option value="stretched">Stretched (Speed)</option>
                         </select>
                     </div>
                     <div class="control-row">
@@ -489,6 +511,17 @@
             <div class="module">
                 <div class="module-header">Global Settings</div>
                 <div class="module-body">
+                    <div class="control-row">
+                        <label>Input Mode</label>
+                        <select id="g-input-mode">
+                            <option value="camera" selected>Camera (Orbit)</option>
+                            <option value="interact">Interact (Repel/Drag)</option>
+                        </select>
+                    </div>
+                    <div class="control-row">
+                        <label>Camera Zoom</label>
+                        <input type="range" id="g-zoom" min="5" max="100" step="1" value="25">
+                    </div>
                      <div class="control-row">
                         <label>Bloom (Post-Process)</label>
                         <input type="checkbox" id="g-bloom" checked>
@@ -596,7 +629,9 @@
             attribute float size;
             attribute vec3 customColor;
             attribute float rotation;
-            attribute float life;
+            attribute float life; // 0 to 1
+            
+            uniform int uSizeFunc; // 0=const, 1=grow, 2=shrink, 3=pulse
             
             varying vec3 vColor;
             varying float vRotation;
@@ -606,8 +641,14 @@
                 vColor = customColor;
                 vRotation = rotation;
                 vLife = life;
+                
+                float s = size;
+                if(uSizeFunc == 1) s = size * (0.2 + 0.8 * life);
+                else if(uSizeFunc == 2) s = size * (1.0 - 0.9 * life);
+                else if(uSizeFunc == 3) s = size * (0.5 + 0.5 * sin(life * 3.14159 * 2.0));
+                
                 vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                gl_PointSize = size * (300.0 / -mvPosition.z);
+                gl_PointSize = s * (300.0 / -mvPosition.z);
                 gl_Position = projectionMatrix * mvPosition;
             }
         `;
@@ -742,6 +783,7 @@
                     scaleX: 1.0,
                     scaleY: 1.0,
                     billboardMode: 'camera', // camera, horizontal, stretched
+                    sizeFunc: 0, // 0=Const, 1=Grow, 2=Shrink, 3=Pulse
 
                     position: new THREE.Vector3(0,0,0) 
                 };
@@ -759,7 +801,8 @@
                     uniforms: {
                         uTexture: { value: getTexture(this.settings.texture) },
                         uScale: { value: new THREE.Vector2(1.0, 1.0) },
-                        uBillboardMode: { value: 0 }
+                        uBillboardMode: { value: 0 },
+                        uSizeFunc: { value: 0 }
                     },
                     vertexShader: particleVertexShader,
                     fragmentShader: particleFragmentShader,
@@ -804,6 +847,7 @@
                 
                 this.material.blending = this.settings.blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending;
                 this.material.uniforms.uScale.value.set(this.settings.scaleX, this.settings.scaleY);
+                this.material.uniforms.uSizeFunc.value = this.settings.sizeFunc;
                 
                 let bm = 0;
                 if(this.settings.billboardMode === 'horizontal') bm = 1;
@@ -936,7 +980,7 @@
                     }
 
                     const lifeRatio = this.life[i] / this.maxLife[i];
-                    this.lifes[i] = lifeRatio;
+                    this.lifes[i] = lifeRatio; // Passed to shader
 
                     // --- PHYSICS ---
                     this.velocities[i3+1] += g * delta; 
@@ -995,12 +1039,7 @@
                     this.colors[i3+1] = c1.g + (c2.g - c1.g) * lifeRatio;
                     this.colors[i3+2] = c1.b + (c2.b - c1.b) * lifeRatio;
                     
-                    // Simple Opacity Fade Hack (Modify size to 0 or color to black)
-                    // Shader handles alpha via color multiply or we could add attribute
-                    // We simply rely on shader additive blending naturally fading out if color goes dark
-                    // But we have uOpacity uniform.
-                    
-                    this.sizes[i] = this.settings.startSize; // Can add curve logic here later
+                    this.sizes[i] = this.settings.startSize; // Base size, modulated by shader
                 }
 
                 this.particleCount = liveCount;
@@ -1008,6 +1047,7 @@
                 this.geometry.attributes.customColor.needsUpdate = true;
                 this.geometry.attributes.size.needsUpdate = true;
                 this.geometry.attributes.rotation.needsUpdate = true;
+                this.geometry.attributes.life.needsUpdate = true;
             }
 
             dispose() {
@@ -1058,6 +1098,7 @@
                         this.customTexture = new THREE.Texture(img);
                         this.customTexture.needsUpdate = true;
                         this.material.uniforms.uTexture.value = this.customTexture;
+                        this.settings.texture = 'custom'; // Logic marker
                     }
                 };
                 reader.readAsDataURL(file);
@@ -1072,10 +1113,11 @@
         let bloomPass;
 
         const globalState = {
-            mouseRepel: false,
+            mouseRepel: false, // Default off
             mouseHit: false,
             mouseTarget: new THREE.Vector3(),
-            bloomEnabled: true
+            bloomEnabled: true,
+            inputMode: 'camera' // Default camera
         };
 
         const raycaster = new THREE.Raycaster();
@@ -1108,6 +1150,7 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
+            controls.enabled = true; // Default enabled for camera mode
 
             addSystem("Base");
             
@@ -1402,6 +1445,11 @@
                     activeSystem.settings[key] = val;
                     if (displayId) document.getElementById(displayId).innerText = val;
 
+                    if (key === 'texture') {
+                        activeSystem.customTexture = null; // Reset custom
+                        activeSystem.material.uniforms.uTexture.value = getTexture(val);
+                    }
+                    if (key === 'blending') activeSystem.material.blending = val === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending;
                     if (key === 'maxParticles') {
                          activeSystem.dispose();
                          activeSystem.initBuffers();
@@ -1435,11 +1483,23 @@
             bind('p-scale-x', 'scaleX', 'float', 'v-scale-x');
             bind('p-scale-y', 'scaleY', 'float', 'v-scale-y');
             bind('p-billboard', 'billboardMode', 'string');
+            bind('p-size-life', 'sizeFunc', 'int');
 
             document.getElementById('btn-burst').onclick = () => { if (activeSystem) activeSystem.emitBurst(1000); };
             document.getElementById('g-autorotate').onchange = (e) => controls.autoRotate = e.target.checked;
             document.getElementById('g-repel').onchange = (e) => globalState.mouseRepel = e.target.checked;
             document.getElementById('g-bloom').onchange = (e) => globalState.bloomEnabled = e.target.checked;
+            
+            // New Controls
+            document.getElementById('g-input-mode').onchange = (e) => {
+                globalState.inputMode = e.target.value;
+                controls.enabled = (globalState.inputMode === 'camera');
+            };
+            document.getElementById('g-zoom').oninput = (e) => {
+                const dist = parseFloat(e.target.value);
+                const dir = new THREE.Vector3().copy(camera.position).normalize();
+                camera.position.copy(dir.multiplyScalar(dist));
+            };
 
             document.getElementById('p-shape').addEventListener('change', (e) => {
                 const meshCtrl = document.getElementById('mesh-controls');
@@ -1504,6 +1564,7 @@
             setVal('p-scale-x', s.scaleX, 'v-scale-x');
             setVal('p-scale-y', s.scaleY, 'v-scale-y');
             setVal('p-billboard', s.billboardMode);
+            setVal('p-size-life', s.sizeFunc);
 
             const meshCtrl = document.getElementById('mesh-controls');
             if (s.shape === 'mesh') meshCtrl.style.display = 'block';

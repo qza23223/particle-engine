@@ -421,6 +421,11 @@
                         <span class="value-display" id="v-drag"></span>
                     </div>
                     <div class="control-row">
+                        <label>Vortex (Spin)</label>
+                        <input type="range" id="p-vortex" min="-10" max="10" step="0.1">
+                        <span class="value-display" id="v-vortex"></span>
+                    </div>
+                    <div class="control-row">
                         <label>Noise Strength</label>
                         <input type="range" id="p-noise-str" min="0" max="10" step="0.1">
                         <span class="value-display" id="v-noise-str"></span>
@@ -468,6 +473,10 @@
                         <input type="color" id="p-color1">
                     </div>
                     <div class="control-row">
+                        <label>Middle Color</label>
+                        <input type="color" id="p-color-mid" value="#8800ff">
+                    </div>
+                    <div class="control-row">
                         <label>End Color</label>
                         <input type="color" id="p-color2">
                     </div>
@@ -476,6 +485,8 @@
                         <input type="range" id="p-opacity" min="0" max="1" step="0.05">
                         <span class="value-display" id="v-opacity"></span>
                     </div>
+                    
+                    <hr>
                     <div class="control-row">
                         <label>Texture</label>
                         <select id="p-texture">
@@ -486,10 +497,27 @@
                             <option value="square">Square (Pixel)</option>
                         </select>
                     </div>
-                    <div class="file-input-wrapper" style="margin-top:10px; margin-bottom:10px;">
+                    <div class="file-input-wrapper" style="margin-top:5px; margin-bottom:10px;">
                         <button class="primary" style="width:100%">Import Sprite Texture</button>
                         <input type="file" id="file-sprite" accept="image/*">
                     </div>
+                    
+                    <div class="control-row">
+                        <label>Use Sprite Sheet</label>
+                        <input type="checkbox" id="p-spritesheet">
+                    </div>
+                    <div id="spritesheet-controls" style="display:none; padding:10px; background:rgba(0,0,0,0.3); border-radius:4px; margin-bottom:10px;">
+                        <div class="control-row">
+                            <label>Tiles X (Cols)</label>
+                            <input type="number" id="p-tile-x" value="1" min="1" style="width:50px">
+                        </div>
+                        <div class="control-row">
+                            <label>Tiles Y (Rows)</label>
+                            <input type="number" id="p-tile-y" value="1" min="1" style="width:50px">
+                        </div>
+                        <p style="font-size:10px; color:#888;">Animation plays based on lifetime.</p>
+                    </div>
+
                     <div class="control-row">
                         <label>Billboard Mode</label>
                         <select id="p-billboard">
@@ -656,20 +684,23 @@
         const particleFragmentShader = `
             uniform sampler2D uTexture;
             uniform vec2 uScale; 
-            uniform int uBillboardMode; // 0=Cam, 1=Horizontal, 2=Stretched
+            uniform int uBillboardMode; 
+            uniform vec2 uTiles;
+            uniform int uSpriteSheet; // 0=Off, 1=On
             
             varying vec3 vColor;
             varying float vRotation;
             varying float vLife;
             
             void main() {
+                // Base UV relative to center of point
                 vec2 uv = gl_PointCoord - 0.5;
                 
                 // Aspect Ratio Scaling
                 uv.x /= uScale.x;
                 uv.y /= uScale.y;
                 
-                // Simple clipping
+                // Simple clipping for non-square scaling
                 if(abs(uv.x) > 0.5 || abs(uv.y) > 0.5) discard;
 
                 // Rotation
@@ -678,7 +709,25 @@
                 mat2 rot = mat2(c, -s, s, c);
                 uv = rot * uv;
                 
+                // Back to 0..1 for texture lookup
                 uv += 0.5;
+
+                // Sprite Sheet Logic
+                if (uSpriteSheet == 1) {
+                    float totalFrames = uTiles.x * uTiles.y;
+                    float frame = floor(vLife * totalFrames);
+                    frame = clamp(frame, 0.0, totalFrames - 1.0);
+                    
+                    float col = mod(frame, uTiles.x);
+                    float row = floor(frame / uTiles.x);
+                    
+                    // Map local UV (0..1) to sheet UV
+                    uv.x = (uv.x + col) / uTiles.x;
+                    // Invert row if texture coordinates start top-left vs bottom-left
+                    // Three.js textures usually flippedY by default? Let's assume standard grid
+                    float targetRow = (uTiles.y - 1.0) - row; 
+                    uv.y = (uv.y + targetRow) / uTiles.y;
+                }
 
                 vec4 tex = texture2D(uTexture, uv);
                 gl_FragColor = vec4(vColor * tex.rgb, tex.a);
@@ -767,8 +816,10 @@
                     drag: 0,
                     noiseStrength: 0,
                     noiseFrequency: 1.0,
+                    vortexStrength: 0, // NEW
 
                     color1: '#4f8aff',
+                    colorMid: '#8800ff', // NEW
                     color2: '#ff4f8a',
                     opacity: 1.0,
                     
@@ -779,11 +830,16 @@
                     collision: false,
                     bounciness: 0.5,
                     rotationStart: 0,
-                    rotationSpeed: 0, // angular velocity
+                    rotationSpeed: 0, 
                     scaleX: 1.0,
                     scaleY: 1.0,
-                    billboardMode: 'camera', // camera, horizontal, stretched
-                    sizeFunc: 0, // 0=Const, 1=Grow, 2=Shrink, 3=Pulse
+                    billboardMode: 'camera', 
+                    sizeFunc: 0, 
+                    
+                    // Sprite Sheet
+                    spriteSheetEnabled: false,
+                    tileX: 1,
+                    tileY: 1,
 
                     position: new THREE.Vector3(0,0,0) 
                 };
@@ -802,7 +858,9 @@
                         uTexture: { value: getTexture(this.settings.texture) },
                         uScale: { value: new THREE.Vector2(1.0, 1.0) },
                         uBillboardMode: { value: 0 },
-                        uSizeFunc: { value: 0 }
+                        uSizeFunc: { value: 0 },
+                        uTiles: { value: new THREE.Vector2(1,1) },
+                        uSpriteSheet: { value: 0 }
                     },
                     vertexShader: particleVertexShader,
                     fragmentShader: particleFragmentShader,
@@ -848,6 +906,8 @@
                 this.material.blending = this.settings.blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending;
                 this.material.uniforms.uScale.value.set(this.settings.scaleX, this.settings.scaleY);
                 this.material.uniforms.uSizeFunc.value = this.settings.sizeFunc;
+                this.material.uniforms.uTiles.value.set(this.settings.tileX, this.settings.tileY);
+                this.material.uniforms.uSpriteSheet.value = this.settings.spriteSheetEnabled ? 1 : 0;
                 
                 let bm = 0;
                 if(this.settings.billboardMode === 'horizontal') bm = 1;
@@ -944,14 +1004,19 @@
 
                 let liveCount = 0;
                 const c1 = new THREE.Color(this.settings.color1);
+                const cm = new THREE.Color(this.settings.colorMid);
                 const c2 = new THREE.Color(this.settings.color2);
+                
                 const g = this.settings.gravity;
                 const drag = this.settings.drag;
                 
                 const nStr = this.settings.noiseStrength;
                 const nFreq = this.settings.noiseFrequency;
+                const vortex = this.settings.vortexStrength;
+                
                 const time = performance.now() * 0.001;
                 const hasNoise = nStr > 0;
+                const hasVortex = vortex !== 0;
                 
                 const rotSpeed = this.settings.rotationSpeed;
 
@@ -992,6 +1057,7 @@
                         this.velocities[i3+2] *= decay;
                     }
 
+                    // NOISE
                     if (hasNoise) {
                         const px = this.positions[i3];
                         const py = this.positions[i3+1];
@@ -999,6 +1065,16 @@
                         this.velocities[i3] += Math.sin(py * nFreq + time) * nStr * delta;
                         this.velocities[i3+1] += Math.cos(pz * nFreq + time * 1.3) * nStr * delta;
                         this.velocities[i3+2] += Math.sin(px * nFreq + time * 0.7) * nStr * delta;
+                    }
+
+                    // VORTEX
+                    if (hasVortex) {
+                        const px = this.positions[i3];
+                        const pz = this.positions[i3+2];
+                        const angle = Math.atan2(pz, px);
+                        // Tangent force
+                        this.velocities[i3] += -Math.sin(angle) * vortex * delta * 5.0;
+                        this.velocities[i3+2] += Math.cos(angle) * vortex * delta * 5.0;
                     }
 
                     // --- COLLISION (Floor at Y=0) ---
@@ -1034,12 +1110,22 @@
                     this.positions[i3+1] += this.velocities[i3+1] * delta;
                     this.positions[i3+2] += this.velocities[i3+2] * delta;
 
-                    // Color Lerp
-                    this.colors[i3]   = c1.r + (c2.r - c1.r) * lifeRatio;
-                    this.colors[i3+1] = c1.g + (c2.g - c1.g) * lifeRatio;
-                    this.colors[i3+2] = c1.b + (c2.b - c1.b) * lifeRatio;
+                    // 3-Color Gradient Lerp
+                    if (lifeRatio < 0.5) {
+                        // Start -> Mid
+                        const t = lifeRatio * 2.0;
+                        this.colors[i3] = c1.r + (cm.r - c1.r) * t;
+                        this.colors[i3+1] = c1.g + (cm.g - c1.g) * t;
+                        this.colors[i3+2] = c1.b + (cm.b - c1.b) * t;
+                    } else {
+                        // Mid -> End
+                        const t = (lifeRatio - 0.5) * 2.0;
+                        this.colors[i3] = cm.r + (c2.r - cm.r) * t;
+                        this.colors[i3+1] = cm.g + (c2.g - cm.g) * t;
+                        this.colors[i3+2] = cm.b + (c2.b - cm.b) * t;
+                    }
                     
-                    this.sizes[i] = this.settings.startSize; // Base size, modulated by shader
+                    this.sizes[i] = this.settings.startSize;
                 }
 
                 this.particleCount = liveCount;
@@ -1098,7 +1184,7 @@
                         this.customTexture = new THREE.Texture(img);
                         this.customTexture.needsUpdate = true;
                         this.material.uniforms.uTexture.value = this.customTexture;
-                        this.settings.texture = 'custom'; // Logic marker
+                        this.settings.texture = 'custom'; 
                     }
                 };
                 reader.readAsDataURL(file);
@@ -1465,11 +1551,13 @@
             bind('p-gravity', 'gravity', 'float', 'v-gravity');
             bind('p-rate', 'emissionRate', 'float', 'v-rate');
             bind('p-drag', 'drag', 'float', 'v-drag');
+            bind('p-vortex', 'vortexStrength', 'float', 'v-vortex'); // NEW
             bind('p-noise-str', 'noiseStrength', 'float', 'v-noise-str');
             bind('p-noise-freq', 'noiseFrequency', 'float', 'v-noise-freq');
             bind('p-shape', 'shape', 'string');
             bind('p-shape-scale', 'shapeScale', 'float', 'v-shape-scale');
             bind('p-color1', 'color1', 'string');
+            bind('p-color-mid', 'colorMid', 'string'); // NEW
             bind('p-color2', 'color2', 'string');
             bind('p-opacity', 'opacity', 'float', 'v-opacity');
             bind('p-texture', 'texture', 'string');
@@ -1484,6 +1572,11 @@
             bind('p-scale-y', 'scaleY', 'float', 'v-scale-y');
             bind('p-billboard', 'billboardMode', 'string');
             bind('p-size-life', 'sizeFunc', 'int');
+            
+            // Sprite Sheet Bindings
+            bind('p-spritesheet', 'spriteSheetEnabled', 'bool');
+            bind('p-tile-x', 'tileX', 'int');
+            bind('p-tile-y', 'tileY', 'int');
 
             document.getElementById('btn-burst').onclick = () => { if (activeSystem) activeSystem.emitBurst(1000); };
             document.getElementById('g-autorotate').onchange = (e) => controls.autoRotate = e.target.checked;
@@ -1511,6 +1604,12 @@
                     meshCtrl.style.display = 'none';
                     radRow.style.display = 'flex';
                 }
+            });
+            
+            // Sprite sheet toggle visibility
+            document.getElementById('p-spritesheet').addEventListener('change', (e) => {
+                const ctrl = document.getElementById('spritesheet-controls');
+                ctrl.style.display = e.target.checked ? 'block' : 'none';
             });
 
             document.getElementById('file-mesh').addEventListener('change', (e) => {
@@ -1547,11 +1646,13 @@
             setVal('p-gravity', s.gravity, 'v-gravity');
             setVal('p-rate', s.emissionRate, 'v-rate');
             setVal('p-drag', s.drag, 'v-drag');
+            setVal('p-vortex', s.vortexStrength, 'v-vortex');
             setVal('p-noise-str', s.noiseStrength, 'v-noise-str');
             setVal('p-noise-freq', s.noiseFrequency, 'v-noise-freq');
             setVal('p-shape', s.shape);
             setVal('p-shape-scale', s.shapeScale, 'v-shape-scale');
             setVal('p-color1', s.color1);
+            setVal('p-color-mid', s.colorMid);
             setVal('p-color2', s.color2);
             setVal('p-opacity', s.opacity, 'v-opacity');
             setVal('p-texture', s.texture);
@@ -1565,6 +1666,11 @@
             setVal('p-scale-y', s.scaleY, 'v-scale-y');
             setVal('p-billboard', s.billboardMode);
             setVal('p-size-life', s.sizeFunc);
+            
+            setVal('p-spritesheet', s.spriteSheetEnabled);
+            setVal('p-tile-x', s.tileX);
+            setVal('p-tile-y', s.tileY);
+            document.getElementById('spritesheet-controls').style.display = s.spriteSheetEnabled ? 'block' : 'none';
 
             const meshCtrl = document.getElementById('mesh-controls');
             if (s.shape === 'mesh') meshCtrl.style.display = 'block';
